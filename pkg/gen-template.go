@@ -14,42 +14,58 @@ import (
 	"os"
 	"path/filepath"
 	"text/template"
+
+	"github.com/pkg/errors"
 )
 
 var outputTemplate string
 
+type dirMetaData struct {
+	Path     string
+	FileMode uint32
+}
+
+type fileMetaData struct {
+	Path     string
+	Content  string
+	FileMode uint32
+}
+
 type TemplateEntries struct {
-	// value is path
-	Dirs []string
-	// key is path, value is content
-	Files map[string]string
+	Dirs  []dirMetaData
+	Files []fileMetaData
 }
 
 type Engine struct {
-	rootDir        string
+	// template root directory
+	rootDir string
+	// tempalte.go's package name
 	InvokerPackage string
+	// template content
 	TemplateEntries
 }
 
 func main() {
 	const outputTemplateGoPath = "template.go"
-	templateDir := os.Args[1]
+	templateRootDir := os.Args[1]
 
-	// ensure templateDir is available
-	if err := os.MkdirAll(templateDir, os.ModePerm); err != nil {
+	// ensure templateRootDir is available
+	if _, err := os.Stat(templateRootDir); os.IsNotExist(err) {
 		log.Fatal(err)
 	}
 
 	invokerPackage := os.Getenv("GOPACKAGE")
 
-	engine := newEngine(templateDir, invokerPackage)
-	if err := filepath.Walk(templateDir, engine.visit); err != nil {
+	engine := newEngine(templateRootDir, invokerPackage)
+	if err := filepath.Walk(templateRootDir, engine.visit); err != nil {
+		err = errors.Wrap(err, "failed to walk")
 		log.Fatal(err)
 	}
 
 	// generate template go file in current directory
 	f, err := os.Create(outputTemplateGoPath)
 	if err != nil {
+		err = errors.Wrapf(err, "failed to create %s", outputTemplateGoPath)
 		log.Fatal(err)
 	}
 	defer f.Close()
@@ -58,11 +74,9 @@ func main() {
 
 func newEngine(root string, invokerPkg string) *Engine {
 	return &Engine{
-		rootDir:        root,
-		InvokerPackage: invokerPkg,
-		TemplateEntries: TemplateEntries{
-			Files: make(map[string]string),
-		},
+		rootDir:         root,
+		InvokerPackage:  invokerPkg,
+		TemplateEntries: TemplateEntries{},
 	}
 }
 
@@ -78,14 +92,11 @@ func (e *Engine) addTemplateEntry(path string, info os.FileInfo) error {
 	if err != nil {
 		return err
 	}
+
 	if info.IsDir() {
-		subEntries, err := ioutil.ReadDir(path)
-		if err != nil {
-			return err
-		}
-		// only add deepest empty dir
-		if len(subEntries) == 0 {
-			e.TemplateEntries.Dirs = append(e.TemplateEntries.Dirs, templateRelPath)
+		if templateRelPath != "." {
+			e.TemplateEntries.Dirs = append(e.TemplateEntries.Dirs,
+				dirMetaData{Path: templateRelPath, FileMode: uint32(info.Mode())})
 		}
 		return nil
 	}
@@ -94,7 +105,8 @@ func (e *Engine) addTemplateEntry(path string, info os.FileInfo) error {
 	if err != nil {
 		return err
 	}
-	e.TemplateEntries.Files[templateRelPath] = string(content)
+	e.TemplateEntries.Files = append(e.TemplateEntries.Files,
+		fileMetaData{Path: templateRelPath, FileMode: uint32(info.Mode()), Content: string(content)})
 	return nil
 }
 
@@ -108,41 +120,64 @@ import (
 	"path/filepath"
 )
 
+type dirMetaData struct {
+	path     string
+	fileMode os.FileMode
+}
+
+type fileMetaData struct {
+	path     string
+	fileMode os.FileMode
+	content  string
+}
+
 var (
-	templateDirs = []string{
+	templateDirs = []dirMetaData{
 	{{- range .TemplateEntries.Dirs }}
-		"{{.}}",
+		dirMetaData{
+			path: 		"{{ .Path }}",
+			fileMode: 	os.FileMode({{ .FileMode }}),
+		},
 	{{- end }}
 	}
 
-	templateFiles = map[string]string{
-	{{ range $key, $value := .TemplateEntries.Files }}
-		"{{ $key }}": %s,
+	templateFiles = []fileMetaData{
+	{{- range .TemplateEntries.Files }}
+		fileMetaData{
+			path: 		"{{ .Path }}",
+			fileMode: 	os.FileMode({{ .FileMode }}),
+			content:	%s,
+		},
 	{{- end }}
 	}
 )
 
 func GenScaffold(outdir string, data interface{}) error {
-	for _, dir := range templateDirs {
-		dir = filepath.Join(outdir, dir)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	// ensure outputdir
+	if _, err := os.Stat(outdir); os.IsNotExist(err) {
+		if err := os.Mkdir(outdir, os.ModePerm); err != nil {
 			return err
 		}
 	}
 
-	for path, content := range templateFiles {
-		path = filepath.Join(outdir, path)
-		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	// prepare directories
+	for _, di := range templateDirs {
+		dir := filepath.Join(outdir, di.path)
+		if err := os.MkdirAll(dir, di.fileMode); err != nil {
 			return err
 		}
-		f, err := os.Create(path)
+	}
+
+	// prepare files
+	for _, fi := range templateFiles {
+		path := filepath.Join(outdir, fi.path)
+		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fi.fileMode)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
 
-		t, err := template.New("").Parse(content)
+		t, err := template.New("").Parse(fi.content)
 		if err != nil {
 			return err
 		}
@@ -152,5 +187,5 @@ func GenScaffold(outdir string, data interface{}) error {
 	}
 
 	return nil
-}`, "`{{ $value }}`")
+}`, "`{{ .Content }}`")
 }

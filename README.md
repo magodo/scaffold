@@ -4,7 +4,7 @@ Generate customizable scaffold command on your wish.
 
 # Usage
 
-By default, this project would create a comamnd named `scaffold`, which will create a dummy greeting project scaffold.
+By default, this project would create (via `go get github.com/magodo/scaffold`) a comamnd named `scaffold`, which will create a dummy greeting project scaffold.
 
 One would like to customize and generate real scaffold on his/her wish. So one would download this project first. Then remove *template.go*, and modify both *template* and *main.go*.
 

@@ -7,17 +7,34 @@ import (
 	"path/filepath"
 )
 
+type dirMetaData struct {
+	path     string
+	fileMode os.FileMode
+}
+
+type fileMetaData struct {
+	path     string
+	fileMode os.FileMode
+	content  string
+}
+
 var (
-	templateDirs = []string{
+	templateDirs = []dirMetaData{
 	}
 
-	templateFiles = map[string]string{
-	
-		".gitignore": `server
+	templateFiles = []fileMetaData{
+		fileMetaData{
+			path: 		".gitignore",
+			fileMode: 	os.FileMode(420),
+			content:	`server
 test.bin
 cmd/server/ver.go
 `,
-		"main.go": `package main
+		},
+		fileMetaData{
+			path: 		"main.go",
+			fileMode: 	os.FileMode(420),
+			content:	`package main
 
 import "fmt"
 
@@ -25,30 +42,36 @@ func main() {
 	fmt.Println("{{.GreetMsg}}")
 }
 `,
+		},
 	}
 )
 
 func GenScaffold(outdir string, data interface{}) error {
-	for _, dir := range templateDirs {
-		dir = filepath.Join(outdir, dir)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	// ensure outputdir
+	if _, err := os.Stat(outdir); os.IsNotExist(err) {
+		if err := os.Mkdir(outdir, os.ModePerm); err != nil {
 			return err
 		}
 	}
 
-	for path, content := range templateFiles {
-		path = filepath.Join(outdir, path)
-		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	// prepare directories
+	for _, di := range templateDirs {
+		dir := filepath.Join(outdir, di.path)
+		if err := os.MkdirAll(dir, di.fileMode); err != nil {
 			return err
 		}
-		f, err := os.Create(path)
+	}
+
+	// prepare files
+	for _, fi := range templateFiles {
+		path := filepath.Join(outdir, fi.path)
+		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fi.fileMode)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
 
-		t, err := template.New("").Parse(content)
+		t, err := template.New("").Parse(fi.content)
 		if err != nil {
 			return err
 		}
