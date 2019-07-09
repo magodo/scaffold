@@ -22,13 +22,13 @@ var outputTemplate string
 
 type dirMetaData struct {
 	Path     string
-	FileMode uint32
+	FileMode os.FileMode
 }
 
 type fileMetaData struct {
 	Path     string
 	Content  string
-	FileMode uint32
+	FileMode os.FileMode
 }
 
 type TemplateEntries struct {
@@ -96,7 +96,7 @@ func (e *Engine) addTemplateEntry(path string, info os.FileInfo) error {
 	if info.IsDir() {
 		if templateRelPath != "." {
 			e.TemplateEntries.Dirs = append(e.TemplateEntries.Dirs,
-				dirMetaData{Path: templateRelPath, FileMode: uint32(info.Mode())})
+				dirMetaData{Path: templateRelPath, FileMode: info.Mode()})
 		}
 		return nil
 	}
@@ -106,7 +106,7 @@ func (e *Engine) addTemplateEntry(path string, info os.FileInfo) error {
 		return err
 	}
 	e.TemplateEntries.Files = append(e.TemplateEntries.Files,
-		fileMetaData{Path: templateRelPath, FileMode: uint32(info.Mode()), Content: string(content)})
+		fileMetaData{Path: templateRelPath, FileMode: info.Mode(), Content: string(content)})
 	return nil
 }
 
@@ -136,7 +136,7 @@ var (
 	{{- range .TemplateEntries.Dirs }}
 		dirMetaData{
 			path: 		"{{ .Path }}",
-			fileMode: 	os.FileMode({{ .FileMode }}),
+			fileMode: 	{{ printf "%%d" .FileMode }},
 		},
 	{{- end }}
 	}
@@ -145,7 +145,7 @@ var (
 	{{- range .TemplateEntries.Files }}
 		fileMetaData{
 			path: 		"{{ .Path }}",
-			fileMode: 	os.FileMode({{ .FileMode }}),
+			fileMode: 	{{ printf "%%d" .FileMode }},
 			content:	%s,
 		},
 	{{- end }}

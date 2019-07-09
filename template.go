@@ -25,7 +25,7 @@ var (
 	templateFiles = []fileMetaData{
 		fileMetaData{
 			path: 		".gitignore",
-			fileMode: 	os.FileMode(420),
+			fileMode: 	420,
 			content:	`server
 test.bin
 cmd/server/ver.go
@@ -33,7 +33,7 @@ cmd/server/ver.go
 		},
 		fileMetaData{
 			path: 		"main.go",
-			fileMode: 	os.FileMode(420),
+			fileMode: 	420,
 			content:	`package main
 
 import "fmt"
