@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/pkg/errors"
@@ -106,8 +107,16 @@ func (e *Engine) addTemplateEntry(path string, info os.FileInfo) error {
 		return err
 	}
 	e.TemplateEntries.Files = append(e.TemplateEntries.Files,
-		fileMetaData{Path: templateRelPath, FileMode: info.Mode(), Content: string(content)})
+		fileMetaData{Path: templateRelPath, FileMode: info.Mode(), Content: espaceBackquote(string(content))})
 	return nil
+}
+
+// As "Content" is quoted by "`", so we need to espace any "`" appears in "Content" via using `fmt.Sprintf`
+func espaceBackquote(content string) string {
+	if !strings.ContainsAny(content, "`") {
+		return fmt.Sprintf("`%s`", content)
+	}
+	return fmt.Sprintf("fmt.Sprintf(`%s`, \"`\")", strings.ReplaceAll(content, "`", "%[1]s"))
 }
 
 func init() {
@@ -187,5 +196,5 @@ func GenScaffold(outdir string, data interface{}) error {
 	}
 
 	return nil
-}`, "`{{ .Content }}`")
+}`, "{{ .Content }}")
 }
